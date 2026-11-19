@@ -3,7 +3,7 @@
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>HostelGuard AI - Reservation Cancellation Predictor</title>
+  <title>HotelGuard AI - Reservation Cancellation Predictor</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="./Reservation Cancellation Predictor_files/saved_resource"></script>
@@ -33,8 +33,8 @@
             <i class="fa-solid fa-bed text-lg"></i>
           </div>
           <div>
-            <h1 class="font-bold text-lg text-slate-900 leading-tight">HostelGuard <span class="text-indigo-600">AI</span></h1>
-            <p class="text-xs text-slate-500">Hostel Reservation Cancellation Predictor</p>
+            <h1 class="font-bold text-lg text-slate-900 leading-tight">HotelGuard <span class="text-indigo-600">AI</span></h1>
+            <p class="text-xs text-slate-500">Hotel Reservation Cancellation Predictor</p>
           </div>
         </div>
 
@@ -64,7 +64,7 @@
           <i class="fa-solid fa-users mr-1.5"></i>Clustering &amp; Personas
         </button>
         <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-insights">
-          <i class="fa-solid fa-chart-pie mr-1.5"></i>Hostel Insights
+          <i class="fa-solid fa-chart-pie mr-1.5"></i>Hotel Insights
         </button>
         <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-devices">
           <i class="fa-solid fa-wifi mr-1.5"></i>Multi-Device Access
@@ -150,7 +150,7 @@
                 <div>
                   <label class="block text-xs font-semibold text-slate-600 mb-1" for="booking_channel">Booking Channel</label>
                   <select id="booking_channel" name="booking_channel" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="Hostelworld">Hostelworld</option>
+                    <option value="Hotelworld">Hotelworld</option>
                     <option value="Booking.com">Booking.com</option>
                     <option value="Direct Website">Direct Website</option>
                     <option value="Airbnb">Airbnb</option>
@@ -279,7 +279,7 @@
                   <i class="fa-solid fa-dollar-sign text-amber-500 mr-1"></i>Expected Loss
                 </div>
                 <div id="expectedLossText" class="text-lg font-bold text-slate-800 mt-0.5">$0.00</div>
-                <div class="text-[10px] text-slate-400">Hostel revenue at risk</div>
+                <div class="text-[10px] text-slate-400">Hotel revenue at risk</div>
               </div>
 
               <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -294,7 +294,7 @@
             <!-- Recommendation Alert -->
             <div id="recommendationAlert" class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-left text-emerald-900 flex items-start space-x-2">
               <i class="fa-solid fa-circle-check mt-0.5 text-emerald-600"></i>
-              <div id="recommendationText">Guaranteed guest: Bed can be safely locked with standard hostel arrival prep.</div>
+              <div id="recommendationText">Guaranteed guest: Bed can be safely locked with standard Hotel arrival prep.</div>
             </div>
 
             <!-- Customer Persona (Clustering Result) -->
@@ -318,7 +318,7 @@
               </h3>
               <span class="text-xs text-indigo-600 font-semibold" id="knnOptimalKText">Optimal k=11</span>
             </div>
-            <p class="text-xs text-slate-500">Historical hostel guests with the most similar profiles and notes:</p>
+            <p class="text-xs text-slate-500">Historical Hotel guests with the most similar profiles and notes:</p>
 
             <div id="knnNeighborsList" class="space-y-2 text-xs"><div class="p-2.5 rounded-lg border flex flex-col space-y-1 bg-emerald-50/50 border-emerald-100">
       <div class="flex items-center justify-between">
@@ -357,7 +357,7 @@
         Lead: 11d | Stay: 20n | Partial Deposit (10%)
       </div>
       <div class="text-[11px] text-slate-600 italic truncate">
-        "Returning backpacker! Loved the hostel vibe last summer, bringing my sister along."
+        "Returning backpacker! Loved the Hotel vibe last summer, bringing my sister along."
       </div>
     </div><div class="p-2.5 rounded-lg border flex flex-col space-y-1 bg-emerald-50/50 border-emerald-100">
       <div class="flex items-center justify-between">
@@ -566,7 +566,7 @@
       <span class="font-medium text-slate-800">Booking.com</span>
       <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+2.28x odds</span>
     </div><div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
-      <span class="font-medium text-slate-800">Hostelworld</span>
+      <span class="font-medium text-slate-800">Hotelworld</span>
       <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+1.91x odds</span>
     </div><div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
       <span class="font-medium text-slate-800">Note keyword: 'flight'</span>
@@ -671,7 +671,7 @@
         </div>
 
         <div class="text-[11px] text-slate-500 pt-1">
-          <i class="fa-solid fa-tag text-indigo-500 mr-1"></i><strong>Key Habits:</strong> Dorm beds, direct/Hostelworld bookings, bottom bunk requests, flight confirmed notes.
+          <i class="fa-solid fa-tag text-indigo-500 mr-1"></i><strong>Key Habits:</strong> Dorm beds, direct/Hotelworld bookings, bottom bunk requests, flight confirmed notes.
         </div>
       </div><div class="glass-card p-5 space-y-3">
         <div class="flex items-center justify-between">
@@ -767,7 +767,7 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- TAB 4: HOSTEL INSIGHTS & DATA              -->
+    <!-- TAB 4: Hotel INSIGHTS & DATA              -->
     <!-- ========================================== -->
     <div id="tab-insights" class="tab-pane hidden space-y-6">
       
@@ -828,7 +828,7 @@
           </div>
           <h3 class="text-xl font-bold text-slate-900">Connect from Any Phone, Tablet or Laptop</h3>
           <p class="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto">
-            This hostel cancellation predictor server is configured to bind on <code class="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono">0.0.0.0:8000</code>, making it instantly accessible across all devices on your network.
+            This Hotel cancellation predictor server is configured to bind on <code class="bg-slate-100 px-1 py-0.5 rounded text-indigo-600 font-mono">0.0.0.0:8000</code>, making it instantly accessible across all devices on your network.
           </p>
         </div>
 
@@ -908,7 +908,7 @@
 
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-    <p>HostelGuard AI • Built with Python, Scikit-Learn, KNN, Regression, K-Means Clustering &amp; NLP</p>
+    <p>HotelGuard AI • Built with Python, Scikit-Learn, KNN, Regression, K-Means Clustering &amp; NLP</p>
   </footer>
 
   <!-- Application Logic -->
