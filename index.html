@@ -912,7 +912,124 @@
   </footer>
 
   <!-- Application Logic -->
-  <script src="./Reservation Cancellation Predictor_files/app.js.download"></script>
+ <script>
+document.addEventListener("DOMContentLoaded", () => {
+  // 1. Navigation Tabs Switching
+  const navTabs = document.querySelectorAll(".nav-tab");
+  const tabPanes = document.querySelectorAll(".tab-pane");
+  navTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      navTabs.forEach(t => {
+        t.classList.remove("tab-active", "text-indigo-600");
+        t.classList.add("text-slate-600");
+      });
+      tab.classList.add("tab-active", "text-indigo-600");
+      tab.classList.remove("text-slate-600");
+
+      const targetId = tab.getAttribute("data-tab");
+      tabPanes.forEach(pane => {
+        if (pane.id === targetId) pane.classList.remove("hidden");
+        else pane.classList.add("hidden");
+      });
+    });
+  });
+
+  // 2. Real-Time Cancellation Risk Prediction Engine
+  const inputs = document.querySelectorAll("input, select, textarea");
+  const gaugePercentEl = document.querySelector("#riskScoreText, #gaugePercent, .text-4xl.font-extrabold");
+  const expectedLossEl = document.getElementById("expectedLossText");
+  const recAlertEl = document.getElementById("recommendationAlert");
+  const recTextEl = document.getElementById("recommendationText");
+
+  function updateSliderLabels() {
+    document.querySelectorAll('input[type="range"]').forEach(slider => {
+      const valSpan = document.getElementById(slider.id + "Val") || document.getElementById(slider.id + "_val");
+      if (valSpan) valSpan.textContent = slider.value;
+    });
+  }
+
+  function calculatePrediction() {
+    updateSliderLabels();
+
+    const leadTime = parseFloat(document.getElementById("lead_time")?.value || 15);
+    const stayNights = parseFloat(document.getElementById("stay_nights")?.value || document.getElementById("nights")?.value || 2);
+    const price = parseFloat(document.getElementById("price_per_night")?.value || document.getElementById("price")?.value || 120);
+    const prevCancels = parseFloat(document.getElementById("previous_cancellations")?.value || 0);
+    const deposit = (document.getElementById("deposit_type")?.value || "No Deposit").toLowerCase();
+    const channel = (document.getElementById("booking_channel")?.value || "Direct Website").toLowerCase();
+    const note = (document.getElementById("guest_note")?.value || document.getElementById("special_requests")?.value || "").toLowerCase();
+
+    let risk = 12.0;
+    risk += Math.min(leadTime * 0.22, 38);
+    risk += prevCancels * 14;
+
+    if (deposit.includes("no deposit")) risk += 18;
+    else if (deposit.includes("partial")) risk += 6;
+    else if (deposit.includes("non")) risk -= 14;
+
+    if (channel.includes("booking.com") || channel.includes("hotelworld") || channel.includes("hostelworld")) risk += 9;
+    else if (channel.includes("direct")) risk -= 7;
+
+    // NLP Guest Note Scoring
+    if (note.includes("visa") || note.includes("unsure") || note.includes("maybe") || note.includes("tentative") || note.includes("cancel")) {
+      risk += 22;
+    }
+    if (note.includes("flight") || note.includes("confirmed") || note.includes("conference") || note.includes("returning") || note.includes("family")) {
+      risk -= 12;
+    }
+
+    risk = Math.max(2.2, Math.min(96.5, risk));
+    const totalBookingVal = stayNights * price;
+    const expectedLoss = (totalBookingVal * (risk / 100)).toFixed(2);
+
+    // Update UI displays
+    document.querySelectorAll("*").forEach(el => {
+      if (el.children.length === 0 && el.textContent.trim().endsWith("%") && el.textContent.trim().length <= 6) {
+        if (el.id.toLowerCase().includes("risk") || el.id.toLowerCase().includes("prob") || el.textContent.trim() === "2.2%") {
+          el.textContent = risk.toFixed(1) + "%";
+        }
+      }
+    });
+    if (gaugePercentEl) gaugePercentEl.textContent = risk.toFixed(1) + "%";
+    if (expectedLossEl) expectedLossEl.textContent = "$" + expectedLoss;
+
+    if (recTextEl && recAlertEl) {
+      if (risk >= 60) {
+        recAlertEl.className = "p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-left text-rose-900 flex items-start space-x-2";
+        recTextEl.textContent = "High Cancellation Risk: Request partial deposit confirmation or send automated pre-arrival check-in reminder.";
+      } else if (risk >= 30) {
+        recAlertEl.className = "p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-left text-amber-900 flex items-start space-x-2";
+        recTextEl.textContent = "Moderate Risk: Monitor booking window and offer flexible date-modification incentive.";
+      } else {
+        recAlertEl.className = "p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-left text-emerald-900 flex items-start space-x-2";
+        recTextEl.textContent = "Guaranteed Guest: Room can be safely locked with standard Hotel arrival prep.";
+      }
+    }
+  }
+
+  inputs.forEach(el => {
+    el.addEventListener("input", calculatePrediction);
+    el.addEventListener("change", calculatePrediction);
+  });
+
+  // 3. Quick Demo Presets
+  document.querySelectorAll("button").forEach(btn => {
+    const label = btn.textContent.toLowerCase();
+    if (label.includes("solo") || label.includes("group") || label.includes("nomad") || label.includes("visa")) {
+      btn.addEventListener("click", () => {
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        if (label.includes("solo")) { setVal("lead_time", 12); setVal("previous_cancellations", 0); setVal("guest_note", "Confirmed flight landing at 2 PM."); }
+        if (label.includes("group")) { setVal("lead_time", 145); setVal("previous_cancellations", 2); setVal("guest_note", "Tentative group trip, waiting on final headcount."); }
+        if (label.includes("nomad")) { setVal("lead_time", 20); setVal("previous_cancellations", 0); setVal("guest_note", "Remote work stay, need strong Wi-Fi."); }
+        if (label.includes("visa")) { setVal("lead_time", 110); setVal("previous_cancellations", 1); setVal("guest_note", "International travel, visa approval still pending."); }
+        calculatePrediction();
+      });
+    }
+  });
+
+  calculatePrediction();
+});
+</script>
 
 
 </body></html>
