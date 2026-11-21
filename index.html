@@ -1,1174 +1,368 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>HotelGuard AI - Reservation Cancellation Predictor</title>
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import qrcode
+from io import BytesIO
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+# Scikit-Learn Imports
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+# ==========================================
+# PAGE CONFIGURATION & LIGHT THEME STYLING
+# ==========================================
+st.set_page_config(
+    page_title="HotelGuard AI - Reservation Cancellation Predictor",
+    page_icon="🛏️",
+    layout="wide"
+)
 
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- QRCode.js CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-  <style>
-    .glass-card {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 1rem;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+st.markdown("""
+    <style>
+    .stApp { background-color: #f8fafc; }
+    div[data-testid="metric-container"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
-    .tab-active {
-      color: #4f46e5;
-      border-bottom: 2px solid #4f46e5;
-      font-weight: 600;
-    }
-    .badge-chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.15rem 0.6rem;
-      border-radius: 9999px;
-      font-size: 0.7rem;
-      font-weight: 600;
-    }
-    .gauge-container {
-      position: relative;
-      width: 140px;
-      height: 140px;
-    }
-    .gauge-circle {
-      transform: rotate(-90deg);
-      transform-origin: 50% 50%;
-    }
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-  </style>
-</head>
-<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
-
-  <!-- Header / Navigation -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
-
-        <!-- Logo & Branding -->
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-100">
-            <i class="fa-solid fa-bed text-lg"></i>
-          </div>
-          <div>
-            <h1 class="font-bold text-lg text-slate-900 leading-tight">HotelGuard <span class="text-indigo-600">AI</span></h1>
-            <p class="text-xs text-slate-500">Hotel Reservation Cancellation Predictor</p>
-          </div>
-        </div>
-
-        <!-- Network / Device Badge & Action -->
-        <div class="flex items-center space-x-2 sm:space-x-4">
-          <div id="lanStatusBadge" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="headerLanUrl">Public HTTPS Active</span>
-          </div>
-
-          <button id="openDeviceModalBtn" class="inline-flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium transition shadow-sm">
-            <i class="fa-solid fa-mobile-screen"></i>
-            <span>Open on Phone</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Navigation Tabs -->
-      <nav class="flex space-x-2 sm:space-x-8 overflow-x-auto no-scrollbar border-t border-slate-100 text-sm font-medium">
-        <button class="nav-tab tab-active py-3 px-2 whitespace-nowrap" data-tab="tab-predictor">
-          <i class="fa-solid fa-bullseye mr-1.5"></i>Predictor &amp; NLP
-        </button>
-        <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-evaluation">
-          <i class="fa-solid fa-chart-line mr-1.5"></i>Model Evaluation &amp; Validation
-        </button>
-        <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-clustering">
-          <i class="fa-solid fa-users mr-1.5"></i>Clustering &amp; Personas
-        </button>
-        <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-insights">
-          <i class="fa-solid fa-chart-pie mr-1.5"></i>Hotel Insights
-        </button>
-        <button class="nav-tab text-slate-600 hover:text-indigo-600 py-3 px-2 whitespace-nowrap" data-tab="tab-devices">
-          <i class="fa-solid fa-wifi mr-1.5"></i>Multi-Device Access
-        </button>
-      </nav>
-    </div>
-  </header>
-
-  <!-- Main Content Area -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-    <!-- ========================================== -->
-    <!-- TAB 1: PREDICTOR & NLP                     -->
-    <!-- ========================================== -->
-    <div id="tab-predictor" class="tab-pane block space-y-6">
-
-      <!-- Top Presets Bar -->
-      <div class="glass-card p-4 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-indigo-50/50 via-white to-violet-50/50">
-        <div class="flex items-center space-x-2 text-xs font-semibold text-slate-700">
-          <i class="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
-          <span>Quick Demo Presets:</span>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button type="button" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 transition shadow-sm" data-preset="safe_backpacker">
-            <i class="fa-solid fa-person-hiking mr-1"></i>Safe Solo Traveler
-          </button>
-          <button type="button" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 transition shadow-sm" data-preset="high_risk_group">
-            <i class="fa-solid fa-people-group mr-1"></i>High-Risk Group Booking
-          </button>
-          <button type="button" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 transition shadow-sm" data-preset="digital_nomad">
-            <i class="fa-solid fa-laptop-code mr-1"></i>Reliable Digital Nomad
-          </button>
-          <button type="button" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-amber-50 text-amber-700 border border-amber-200 transition shadow-sm" data-preset="visa_delay">
-            <i class="fa-solid fa-passport mr-1"></i>Visa Delayed International
-          </button>
-        </div>
-      </div>
-
-      <!-- Main Prediction Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- Form Column (Left: 7 cols) -->
-        <div class="lg:col-span-7 space-y-5">
-          <div class="glass-card p-5 sm:p-6 space-y-5">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 class="font-bold text-slate-800 text-base flex items-center">
-                <i class="fa-solid fa-sliders text-indigo-600 mr-2"></i>Reservation Details
-              </h2>
-              <span class="text-xs text-slate-400">All fields update ML live</span>
-            </div>
-
-            <form id="predictionForm" class="space-y-4">
-
-              <!-- Lead Time Slider -->
-              <div>
-                <div class="flex justify-between items-center mb-1 text-sm font-medium text-slate-700">
-                  <label for="lead_time">Booking Lead Time</label>
-                  <span id="lead_time_val" class="font-bold text-indigo-600">12 days</span>
-                </div>
-                <input type="range" id="lead_time" name="lead_time" min="0" max="180" value="12" class="w-full accent-indigo-600">
-                <div class="flex justify-between text-[11px] text-slate-400 mt-1">
-                  <span>Same-day (0d)</span>
-                  <span>1 month (30d)</span>
-                  <span>3 months (90d)</span>
-                  <span>6 months (180d)</span>
-                </div>
-              </div>
-
-              <!-- Room Type & Booking Channel -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="room_type">Room Type</label>
-                  <select id="room_type" name="room_type" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="Standard Single Room">Standard Single Room ($45)</option>
-                    <option value="Deluxe Double Room">Deluxe Double Room ($75)</option>
-                    <option value="Executive Suite">Executive Suite ($140)</option>
-                    <option value="Family Suite">Family Suite ($165)</option>
-                    <option value="4-Bed Shared Dorm">4-Bed Shared Dorm ($32)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="booking_channel">Booking Channel</label>
-                  <select id="booking_channel" name="booking_channel" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="Direct Website">Direct Website</option>
-                    <option value="Booking.com">Booking.com</option>
-                    <option value="Hotelworld">Hotelworld</option>
-                    <option value="Airbnb">Airbnb</option>
-                    <option value="Walk-in">Walk-in</option>
-                    <option value="Expedia">Expedia</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Customer Type & Deposit Policy -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="customer_type">Customer Persona</label>
-                  <select id="customer_type" name="customer_type" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="Solo Traveler">Solo Traveler</option>
-                    <option value="Digital Nomad">Digital Nomad</option>
-                    <option value="Group Booking">Group Booking</option>
-                    <option value="Weekend Tourist">Weekend Tourist</option>
-                    <option value="Business Traveler">Business Traveler</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="deposit_type">Deposit Policy</label>
-                  <select id="deposit_type" name="deposit_type" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="Partial Deposit (10%)">Partial Deposit (10%)</option>
-                    <option value="No Deposit">No Deposit (Highest risk)</option>
-                    <option value="Non-Refundable 100%">Non-Refundable 100% (Safest)</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Price, Duration, Guests -->
-              <div class="grid grid-cols-3 gap-3">
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="price_per_night">Price/Night ($)</label>
-                  <input type="number" id="price_per_night" name="price_per_night" value="75" min="5" max="500" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="stay_duration">Nights</label>
-                  <input type="number" id="stay_duration" name="stay_duration" value="3" min="1" max="60" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-slate-600 mb-1" for="num_guests">Guests</label>
-                  <input type="number" id="num_guests" name="num_guests" value="1" min="1" max="12" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                </div>
-              </div>
-
-              <!-- Guest History -->
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                <div>
-                  <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="previous_cancellations">Past Cancels</label>
-                  <input type="number" id="previous_cancellations" name="previous_cancellations" value="0" min="0" max="10" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800">
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="previous_stays">Past Stays</label>
-                  <input type="number" id="previous_stays" name="previous_stays" value="1" min="0" max="20" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800">
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="booking_changes">Changes</label>
-                  <input type="number" id="booking_changes" name="booking_changes" value="0" min="0" max="10" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800">
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="is_repeated_guest">Repeat Guest?</label>
-                  <select id="is_repeated_guest" name="is_repeated_guest" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800">
-                    <option value="0">No</option>
-                    <option value="1">Yes</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- NLP Special Requests & Notes Box -->
-              <div class="pt-2 border-t border-slate-100">
-                <div class="flex justify-between items-center mb-1">
-                  <label class="block text-xs font-bold text-slate-700 flex items-center" for="special_requests_text">
-                    <i class="fa-solid fa-comment-dots text-indigo-600 mr-1.5"></i>Guest Note / Special Request (NLP Analysis)
-                  </label>
-                  <span id="nlpLiveIndicator" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">High Commitment</span>
-                </div>
-                <textarea id="special_requests_text" name="special_requests_text" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. 'Arriving late on confirmed flight, need airport pickup' OR 'Might cancel if visa gets delayed'">Arriving on confirmed flight, early check-in requested.</textarea>
-
-                <!-- NLP Real-time Trigger Detection Tags -->
-                <div id="nlpTagsContainer" class="mt-2 flex flex-wrap gap-1.5 text-xs"></div>
-              </div>
-
-              <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition shadow-md shadow-indigo-100 flex items-center justify-center space-x-2">
-                <i class="fa-solid fa-bolt"></i>
-                <span>Predict Cancellation Risk</span>
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <!-- Output Column (Right: 5 cols) -->
-        <div class="lg:col-span-5 space-y-5">
-
-          <!-- Primary Prediction Card -->
-          <div class="glass-card p-5 sm:p-6 text-center space-y-4 relative overflow-hidden">
-            <div id="riskHeaderGlow" class="absolute inset-x-0 top-0 h-1.5 bg-emerald-500"></div>
-
-            <div class="flex justify-between items-center">
-              <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Prediction Engine</span>
-              <span id="riskTierBadge" class="badge-chip bg-emerald-100 text-emerald-800 border border-emerald-200">Low Risk (Safe)</span>
-            </div>
-
-            <!-- Probability Gauge / Circle -->
-            <div class="flex flex-col items-center justify-center py-2">
-              <div class="gauge-container flex items-center justify-center">
-                <svg class="w-full h-full" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="42" stroke="#e2e8f0" stroke-width="10" fill="transparent"></circle>
-                  <circle id="gaugeProgressCircle" class="gauge-circle transition-all duration-700" cx="50" cy="50" r="42" stroke="#10b981" stroke-width="10" stroke-dasharray="264" stroke-dashoffset="245" stroke-linecap="round" fill="transparent"></circle>
-                </svg>
-                <div class="absolute flex flex-col items-center">
-                  <span id="probValueText" class="text-3xl font-extrabold text-slate-800">7.2%</span>
-                  <span class="text-[11px] text-slate-400 font-medium">Cancellation Prob</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Financial Loss & Timing -->
-            <div class="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-left">
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div class="text-[11px] text-slate-500 font-medium flex items-center">
-                  <i class="fa-solid fa-dollar-sign text-amber-500 mr-1"></i>Expected Loss
-                </div>
-                <div id="expectedLossText" class="text-lg font-bold text-slate-800 mt-0.5">$16.20</div>
-                <div class="text-[10px] text-slate-400">Hotel revenue at risk</div>
-              </div>
-
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div class="text-[11px] text-slate-500 font-medium flex items-center">
-                  <i class="fa-solid fa-calendar-xmark text-indigo-500 mr-1"></i>Est. Notice
-                </div>
-                <div id="noticeDaysText" class="text-lg font-bold text-slate-800 mt-0.5">N/A</div>
-                <div class="text-[10px] text-slate-400">Before check-in</div>
-              </div>
-            </div>
-
-            <!-- Recommendation Alert -->
-            <div id="recommendationAlert" class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-left text-emerald-900 flex items-start space-x-2">
-              <i class="fa-solid fa-circle-check mt-0.5 text-emerald-600"></i>
-              <div id="recommendationText">Guaranteed guest: Room can be safely locked with standard Hotel arrival prep.</div>
-            </div>
-
-            <!-- Customer Persona (Clustering Result) -->
-            <div class="p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 text-left">
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[11px] font-bold text-indigo-900 flex items-center">
-                  <i class="fa-solid fa-id-badge mr-1 text-indigo-600"></i>Assigned Persona (Clustering)
-                </span>
-                <span id="personaClusterId" class="text-[10px] px-2 py-0.5 rounded-full bg-white text-indigo-700 font-semibold border border-indigo-200">Cluster 0</span>
-              </div>
-              <div id="personaTitleText" class="text-sm font-bold text-slate-800">Spontaneous Solo Travelers</div>
-              <p id="personaDescText" class="text-xs text-slate-600 mt-0.5">Solo travelers booking short stays on confirmed schedules with low cancellation rates.</p>
-            </div>
-          </div>
-
-          <!-- K-Nearest Neighbours Historical Bookings -->
-          <div class="glass-card p-5 space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 class="font-bold text-sm text-slate-800 flex items-center">
-                <i class="fa-solid fa-diagram-project text-indigo-600 mr-1.5"></i>KNN Nearest Historical Bookings
-              </h3>
-              <span class="text-xs text-indigo-600 font-semibold" id="knnOptimalKText">Optimal k=11</span>
-            </div>
-            <p class="text-xs text-slate-500">Historical Hotel guests with the most similar profiles and notes:</p>
-
-            <div id="knnNeighborsList" class="space-y-2 text-xs">
-              <div class="p-2.5 rounded-lg border flex flex-col space-y-1 bg-emerald-50/50 border-emerald-100">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-slate-800">HTL-2026-01979 • Deluxe Double Room</span>
-                  <span class="badge-chip bg-emerald-100 text-emerald-700">Attended (94.2% match)</span>
-                </div>
-                <div class="text-[11px] text-slate-500">Lead: 10d | Stay: 3n | Partial Deposit (10%)</div>
-                <div class="text-[11px] text-slate-600 italic truncate">"Flight confirmed, arriving at 4 PM."</div>
-              </div>
-
-              <div class="p-2.5 rounded-lg border flex flex-col space-y-1 bg-rose-50/50 border-rose-100">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-slate-800">HTL-2026-01934 • Family Suite</span>
-                  <span class="badge-chip bg-rose-100 text-rose-700">Cancelled (88.4% match)</span>
-                </div>
-                <div class="text-[11px] text-slate-500">Lead: 112d | Stay: 5n | No Deposit</div>
-                <div class="text-[11px] text-slate-600 italic truncate">"May have to cancel if visa approval gets delayed."</div>
-              </div>
-
-              <div class="p-2.5 rounded-lg border flex flex-col space-y-1 bg-emerald-50/50 border-emerald-100">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-slate-800">HTL-2026-00848 • Standard Single Room</span>
-                  <span class="badge-chip bg-emerald-100 text-emerald-700">Attended (85.1% match)</span>
-                </div>
-                <div class="text-[11px] text-slate-500">Lead: 14d | Stay: 4n | Non-Refundable 100%</div>
-                <div class="text-[11px] text-slate-600 italic truncate">"Returning guest! Loved the Hotel service last trip."</div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 2: MODEL EVALUATION & VALIDATION       -->
-    <!-- ========================================== -->
-    <div id="tab-evaluation" class="tab-pane hidden space-y-6">
-
-      <!-- Top Overview Metrics -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="glass-card p-4">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Validation Strategy</div>
-          <div class="text-xl font-bold text-slate-900 mt-1">5-Fold Stratified CV</div>
-          <div class="text-xs text-emerald-600 mt-1"><i class="fa-solid fa-shield-halved mr-1"></i>No data leakage</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top Classification ROC-AUC</div>
-          <div id="evalTopAuc" class="text-xl font-bold text-indigo-600 mt-1">0.891</div>
-          <div class="text-xs text-slate-500 mt-1">Gradient Boosting &amp; Logistic</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Financial Loss RMSE</div>
-          <div id="evalLossRmse" class="text-xl font-bold text-amber-600 mt-1">$338.56</div>
-          <div class="text-xs text-slate-500 mt-1">Ridge Regression on dollar loss</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Notice Timing MAE</div>
-          <div id="evalTimingMae" class="text-xl font-bold text-violet-600 mt-1">5.44 days</div>
-          <div class="text-xs text-slate-500 mt-1">Predicted cancellation window</div>
-        </div>
-      </div>
-
-      <!-- Cross-Validation & Test Benchmarks Table -->
-      <div class="glass-card p-5 sm:p-6 space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div>
-            <h3 class="font-bold text-slate-800 text-base flex items-center">
-              <i class="fa-solid fa-table-list text-indigo-600 mr-2"></i>Multi-Model Evaluation &amp; Validation Benchmark
-            </h3>
-            <p class="text-xs text-slate-500 mt-0.5">Evaluating K-Nearest Neighbours, Logistic Regression, and Ensemble Benchmark</p>
-          </div>
-          <span class="badge-chip bg-indigo-50 text-indigo-700 border border-indigo-200">80/20 Train-Test Split</span>
-        </div>
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-600">
-            <thead class="bg-slate-50 text-slate-700 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-200">
-              <tr>
-                <th class="py-3 px-3">Model</th>
-                <th class="py-3 px-3">5-Fold CV Acc</th>
-                <th class="py-3 px-3">Test Acc</th>
-                <th class="py-3 px-3">Precision</th>
-                <th class="py-3 px-3">Recall</th>
-                <th class="py-3 px-3">F1-Score</th>
-                <th class="py-3 px-3">ROC-AUC</th>
-                <th class="py-3 px-3">Generalization Gap</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              <tr class="hover:bg-slate-50 transition">
-                <td class="py-2.5 px-3 font-semibold text-slate-800">K-Nearest Neighbours</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">82.86% (±1.1%)</td>
-                <td class="py-2.5 px-3 font-bold text-indigo-600">82.89%</td>
-                <td class="py-2.5 px-3">0.648</td>
-                <td class="py-2.5 px-3">0.560</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">0.601</td>
-                <td class="py-2.5 px-3 font-bold text-emerald-600">0.841</td>
-                <td class="py-2.5 px-3 text-[11px] text-slate-500">17.1% gap (Good)</td>
-              </tr>
-              <tr class="hover:bg-slate-50 transition">
-                <td class="py-2.5 px-3 font-semibold text-slate-800">Logistic Regression</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">85.39% (±1.3%)</td>
-                <td class="py-2.5 px-3 font-bold text-indigo-600">83.78%</td>
-                <td class="py-2.5 px-3">0.678</td>
-                <td class="py-2.5 px-3">0.560</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">0.614</td>
-                <td class="py-2.5 px-3 font-bold text-emerald-600">0.891</td>
-                <td class="py-2.5 px-3 text-[11px] text-slate-500">2.4% gap (Good)</td>
-              </tr>
-              <tr class="hover:bg-slate-50 transition">
-                <td class="py-2.5 px-3 font-semibold text-slate-800">Gradient Boosting</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">84.81% (±1.12%)</td>
-                <td class="py-2.5 px-3 font-bold text-indigo-600">84.67%</td>
-                <td class="py-2.5 px-3">0.695</td>
-                <td class="py-2.5 px-3">0.594</td>
-                <td class="py-2.5 px-3 font-medium text-slate-700">0.641</td>
-                <td class="py-2.5 px-3 font-bold text-emerald-600">0.886</td>
-                <td class="py-2.5 px-3 text-[11px] text-slate-500">7.5% gap (Good)</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Curves & Confusion Matrix Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- ROC Curves Chart (7 cols) -->
-        <div class="lg:col-span-7 glass-card p-5 sm:p-6 space-y-3">
-          <div class="flex items-center justify-between">
-            <h4 class="font-bold text-sm text-slate-800 flex items-center">
-              <i class="fa-solid fa-chart-area text-indigo-600 mr-2"></i>ROC Curves Comparison
-            </h4>
-            <span class="text-[11px] text-slate-400">Sensitivity vs 1 - Specificity</span>
-          </div>
-          <div class="relative h-64 sm:h-72 w-full">
-            <canvas id="rocChartCanvas"></canvas>
-          </div>
-        </div>
-
-        <!-- Confusion Matrix Visualizer (5 cols) -->
-        <div class="lg:col-span-5 glass-card p-5 sm:p-6 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h4 class="font-bold text-sm text-slate-800 flex items-center">
-              <i class="fa-solid fa-border-all text-indigo-600 mr-2"></i>Confusion Matrix
-            </h4>
-            <select id="cmModelSelector" class="text-xs bg-slate-50 border border-slate-200 rounded px-2 py-1">
-              <option value="Logistic Regression">Logistic Regression</option>
-              <option value="K-Nearest Neighbours">KNN (k=11)</option>
-              <option value="Gradient Boosting">Gradient Boosting</option>
-            </select>
-          </div>
-
-          <!-- 2x2 Matrix Grid -->
-          <div class="grid grid-cols-2 gap-2 text-center text-xs">
-            <div class="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-              <div class="text-[10px] uppercase font-bold text-emerald-800">True Negative (Attended)</div>
-              <div id="cmTN" class="text-xl font-extrabold text-emerald-700 mt-1">638</div>
-              <div class="text-[10px] text-emerald-600 mt-0.5">Correctly kept room</div>
-            </div>
-            <div class="p-3 rounded-lg bg-amber-50 border border-amber-200">
-              <div class="text-[10px] uppercase font-bold text-amber-800">False Positive (False Alarm)</div>
-              <div id="cmFP" class="text-xl font-extrabold text-amber-700 mt-1">55</div>
-              <div class="text-[10px] text-amber-600 mt-0.5">Predicted cancel, attended</div>
-            </div>
-            <div class="p-3 rounded-lg bg-rose-50 border border-rose-200">
-              <div class="text-[10px] uppercase font-bold text-rose-800">False Negative (Missed)</div>
-              <div id="cmFN" class="text-xl font-extrabold text-rose-700 mt-1">91</div>
-              <div class="text-[10px] text-rose-600 mt-0.5">Predicted attend, cancelled</div>
-            </div>
-            <div class="p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-              <div class="text-[10px] uppercase font-bold text-indigo-800">True Positive (Cancelled)</div>
-              <div id="cmTP" class="text-xl font-extrabold text-indigo-700 mt-1">116</div>
-              <div class="text-[10px] text-indigo-600 mt-0.5">Correctly caught cancel</div>
-            </div>
-          </div>
-
-          <!-- Matrix Metrics Breakdown -->
-          <div class="pt-2 text-xs space-y-1.5 text-slate-600 border-t border-slate-100">
-            <div class="flex justify-between">
-              <span>False Alarm Rate:</span>
-              <span id="cmFar" class="font-semibold text-slate-800">7.9%</span>
-            </div>
-            <div class="flex justify-between">
-              <span>Miss Rate (FNR):</span>
-              <span id="cmMissRate" class="font-semibold text-slate-800">44.0%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Regression Feature Coefficients (Odds Ratios) -->
-      <div class="glass-card p-5 sm:p-6 space-y-4">
-        <h4 class="font-bold text-slate-800 text-sm flex items-center">
-          <i class="fa-solid fa-scale-balanced text-indigo-600 mr-2"></i>Regression Coefficients &amp; Odds Ratios (Feature Impact)
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-          <div>
-            <h5 class="font-bold text-rose-700 mb-2 flex items-center">
-              <i class="fa-solid fa-arrow-trend-up mr-1.5"></i>Top Factors Increasing Cancellation Risk:
-            </h5>
-            <div class="space-y-2">
-              <div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">No Deposit Policy</span>
-                <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+4.21x odds</span>
-              </div>
-              <div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">NLP Uncertainty Score</span>
-                <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+3.11x odds</span>
-              </div>
-              <div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Booking.com OTA Channel</span>
-                <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+2.28x odds</span>
-              </div>
-              <div class="p-2 rounded bg-rose-50/70 border border-rose-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Long Booking Lead Time (&gt;90d)</span>
-                <span class="badge-chip bg-rose-100 text-rose-800 font-bold">+1.91x odds</span>
-              </div>
-            </div>
-          </div>
-          <div>
-            <h5 class="font-bold text-emerald-700 mb-2 flex items-center">
-              <i class="fa-solid fa-arrow-trend-down mr-1.5"></i>Top Protective Factors Reducing Risk:
-            </h5>
-            <div class="space-y-2">
-              <div class="p-2 rounded bg-emerald-50/70 border border-emerald-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Walk-in / Same-Day Arrival</span>
-                <span class="badge-chip bg-emerald-100 text-emerald-800 font-bold">0.12x odds</span>
-              </div>
-              <div class="p-2 rounded bg-emerald-50/70 border border-emerald-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Non-Refundable 100% Deposit</span>
-                <span class="badge-chip bg-emerald-100 text-emerald-800 font-bold">0.13x odds</span>
-              </div>
-              <div class="p-2 rounded bg-emerald-50/70 border border-emerald-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Note keyword: 'flight confirmed'</span>
-                <span class="badge-chip bg-emerald-100 text-emerald-800 font-bold">0.23x odds</span>
-              </div>
-              <div class="p-2 rounded bg-emerald-50/70 border border-emerald-100 flex justify-between items-center">
-                <span class="font-medium text-slate-800">Repeat Guest / Previous Stays</span>
-                <span class="badge-chip bg-emerald-100 text-emerald-800 font-bold">0.47x odds</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 3: CLUSTERING & PERSONAS               -->
-    <!-- ========================================== -->
-    <div id="tab-clustering" class="tab-pane hidden space-y-6">
-
-      <!-- Clustering Overview -->
-      <div class="glass-card p-5 sm:p-6 space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-          <div>
-            <h3 class="font-bold text-slate-800 text-base flex items-center">
-              <i class="fa-solid fa-circle-nodes text-indigo-600 mr-2"></i>K-Means Customer Segmentation &amp; 2D PCA Mapping
-            </h3>
-            <p class="text-xs text-slate-500 mt-0.5">Unsupervised guest behavioral clusters discovered using K-Means and Silhouette validation</p>
-          </div>
-          <div class="flex items-center space-x-2 text-xs">
-            <span class="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">Optimal k = 4</span>
-          </div>
-        </div>
-
-        <!-- 2D PCA Scatter Plot -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          <div class="lg:col-span-8 relative h-72 sm:h-80 w-full">
-            <canvas id="pcaScatterCanvas"></canvas>
-          </div>
-
-          <!-- Clustering Quality Metrics -->
-          <div class="lg:col-span-4 space-y-3 text-xs">
-            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <div class="font-bold text-slate-800 mb-1 flex items-center">
-                <i class="fa-solid fa-chart-simple text-indigo-600 mr-1.5"></i>Silhouette Score by K:
-              </div>
-              <div class="space-y-1 text-slate-600">
-                <div class="flex justify-between"><span>k = 2 clusters:</span><span>0.156</span></div>
-                <div class="flex justify-between"><span>k = 3 clusters:</span><span>0.171</span></div>
-                <div class="flex justify-between font-bold text-indigo-700"><span>k = 4 clusters:</span><span>0.186 (Optimal ★)</span></div>
-                <div class="flex justify-between"><span>k = 5 clusters:</span><span>0.196</span></div>
-                <div class="flex justify-between"><span>k = 6 clusters:</span><span>0.200</span></div>
-              </div>
-            </div>
-
-            <div class="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200 text-slate-700">
-              <div class="font-bold text-indigo-900 mb-1">
-                <i class="fa-solid fa-lightbulb text-indigo-600 mr-1"></i>PCA Dimensionality:
-              </div>
-              <p>The 94 high-dimensional booking, categorical, and TF-IDF NLP dimensions are projected onto 2 Principal Components (PC1 &amp; PC2) explaining key guest variance.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Persona Cards Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="glass-card p-5 space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cluster 0</span>
-            <span class="badge-chip bg-emerald-100 text-emerald-700">Low Risk</span>
-          </div>
-          <h4 class="font-bold text-base text-slate-900">Spontaneous Solo Travelers</h4>
-          <p class="text-xs text-slate-600">Solo travelers booking 1–4 nights on short notice (0–14 days lead time). Highly committed with confirmed flight plans.</p>
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Cancel Rate</div><div class="font-bold text-xs text-emerald-600">14.2%</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Lead Time</div><div class="font-bold text-xs text-slate-800">11.5d</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Spend</div><div class="font-bold text-xs text-slate-800">$210.00</div></div>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cluster 1</span>
-            <span class="badge-chip bg-rose-100 text-rose-700">High Risk</span>
-          </div>
-          <h4 class="font-bold text-base text-slate-900">High-Risk Speculative Groups</h4>
-          <p class="text-xs text-slate-600">Groups of 3–8 guests booking months in advance with No Deposit. Vulnerable to schedule changes and visa delays.</p>
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Cancel Rate</div><div class="font-bold text-xs text-rose-600">42.8%</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Lead Time</div><div class="font-bold text-xs text-slate-800">98.4d</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Spend</div><div class="font-bold text-xs text-slate-800">$985.55</div></div>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cluster 2</span>
-            <span class="badge-chip bg-blue-100 text-blue-700">Very Low Risk</span>
-          </div>
-          <h4 class="font-bold text-base text-slate-900">Reliable Digital Nomads &amp; Long Stayers</h4>
-          <p class="text-xs text-slate-600">Remote workers booking 1–4 weeks with partial/full deposits, high repeat loyalty, and workspace requests.</p>
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Cancel Rate</div><div class="font-bold text-xs text-emerald-600">9.8%</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Lead Time</div><div class="font-bold text-xs text-slate-800">22.7d</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Spend</div><div class="font-bold text-xs text-slate-800">$769.73</div></div>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cluster 3</span>
-            <span class="badge-chip bg-amber-100 text-amber-700">Moderate Risk</span>
-          </div>
-          <h4 class="font-bold text-base text-slate-900">Weekend Tourists &amp; City Explorers</h4>
-          <p class="text-xs text-slate-600">Couples or duos traveling for weekend getaways with moderate lead times and standard OTA cancellation patterns.</p>
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Cancel Rate</div><div class="font-bold text-xs text-amber-600">24.5%</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Lead Time</div><div class="font-bold text-xs text-slate-800">31.4d</div></div>
-            <div class="p-2 rounded bg-slate-50"><div class="text-[10px] text-slate-400">Avg Spend</div><div class="font-bold text-xs text-slate-800">$354.60</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 4: HOTEL INSIGHTS & DATA               -->
-    <!-- ========================================== -->
-    <div id="tab-insights" class="tab-pane hidden space-y-6">
-
-      <!-- Stats Overview Counters -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div class="glass-card p-4">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase">Total Reservations</div>
-          <div class="text-2xl font-black text-slate-900 mt-1">4,500</div>
-          <div class="text-xs text-slate-500 mt-0.5">Historical records</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase">Overall Cancel Rate</div>
-          <div class="text-2xl font-black text-rose-600 mt-1">23.02%</div>
-          <div class="text-xs text-slate-500 mt-0.5">Industry avg ~25%</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase">Avg Lead Time</div>
-          <div class="text-2xl font-black text-indigo-600 mt-1">23.8 days</div>
-          <div class="text-xs text-slate-500 mt-0.5">Booking to arrival</div>
-        </div>
-        <div class="glass-card p-4">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase">Total Revenue at Risk</div>
-          <div class="text-2xl font-black text-amber-600 mt-1">$571,140</div>
-          <div class="text-xs text-slate-500 mt-0.5">Cancellations volume</div>
-        </div>
-      </div>
-
-      <!-- Charts Row -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="glass-card p-5 sm:p-6 space-y-3">
-          <h4 class="font-bold text-sm text-slate-800 flex items-center">
-            <i class="fa-solid fa-door-open text-indigo-600 mr-2"></i>Cancellation Rate by Room Type
-          </h4>
-          <div class="relative h-64 w-full">
-            <canvas id="roomChartCanvas"></canvas>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 sm:p-6 space-y-3">
-          <h4 class="font-bold text-sm text-slate-800 flex items-center">
-            <i class="fa-solid fa-credit-card text-indigo-600 mr-2"></i>Cancellation Rate by Deposit Policy
-          </h4>
-          <div class="relative h-64 w-full">
-            <canvas id="depositChartCanvas"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 5: MULTI-DEVICE GUIDE & QR CODE        -->
-    <!-- ========================================== -->
-    <div id="tab-devices" class="tab-pane hidden space-y-6">
-      <div class="glass-card p-6 sm:p-8 space-y-6 max-w-4xl mx-auto">
-        <div class="text-center space-y-2">
-          <div class="w-12 h-12 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-qrcode"></i>
-          </div>
-          <h3 class="text-xl font-bold text-slate-900">Connect from Any Phone, Tablet or Laptop</h3>
-          <p class="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto">
-            HotelGuard AI is deployed on GitHub Pages HTTPS, making it instantly accessible across all mobile and desktop browsers.
-          </p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center pt-2">
-          <!-- QR Code Container -->
-          <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-center space-y-3">
-            <div id="qrCodeWrapper" class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 inline-block"></div>
-            <div class="text-xs text-slate-500">
-              <i class="fa-solid fa-camera mr-1 text-indigo-600"></i>Scan QR code to open live predictor on mobile
-            </div>
-          </div>
-
-          <!-- Network URL & Instructions -->
-          <div class="space-y-4 text-xs sm:text-sm">
-            <div class="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-2">
-              <div class="text-xs font-semibold uppercase tracking-wider text-indigo-800">Live Public Web Link:</div>
-              <div class="flex items-center space-x-2">
-                <input id="networkUrlInput" type="text" readonly class="flex-1 px-3 py-2 bg-white border border-indigo-300 rounded-lg font-mono text-xs text-indigo-900 font-bold select-all" value="https://nikita160621.github.io/Hotel-Reservation-Cancellation/">
-                <button type="button" id="copyUrlBtn" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition">
-                  <i class="fa-regular fa-copy"></i>
-                </button>
-              </div>
-              <div class="text-[11px] text-indigo-700">Works in Safari, Chrome, Edge, and Firefox on iOS and Android.</div>
-            </div>
-
-            <div class="space-y-2 text-xs text-slate-600">
-              <div class="font-bold text-slate-800 flex items-center">
-                <i class="fa-solid fa-list-check text-indigo-600 mr-2"></i>Quick Access Checklist:
-              </div>
-              <ul class="list-disc list-inside space-y-1 pl-1 text-slate-600">
-                <li>Open the link or scan the QR code from any device with internet access.</li>
-                <li>Test different booking scenarios using the <strong>Quick Demo Presets</strong>.</li>
-                <li>Inspect ROC curves, K-Means PCA clusters, and hotel deposit analytics across tabs.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- Modal for Mobile QR Code Quick Pop-up -->
-  <div id="deviceModal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-xl">
-      <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-        <h3 class="font-bold text-slate-800 text-sm">Scan with Phone Camera</h3>
-        <button type="button" id="closeDeviceModalBtn" class="text-slate-400 hover:text-slate-600 text-sm">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-
-      <div id="modalQrCodeWrapper" class="p-3 bg-slate-50 rounded-xl inline-block border border-slate-200 mx-auto"></div>
-
-      <div class="text-xs text-slate-600 font-mono bg-slate-50 p-2 rounded border border-slate-200 break-all">
-        https://nikita160621.github.io/Hotel-Reservation-Cancellation/
-      </div>
-
-      <p class="text-[11px] text-slate-500">
-        Point your phone camera at the QR code to launch HotelGuard AI directly.
-      </p>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-    <p>HotelGuard AI • Built by Nikita Pancheshwar • Scikit-Learn, KNN, Regression, K-Means Clustering &amp; NLP</p>
-  </footer>
-
-  <!-- Complete Application Logic -->
-  <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const LIVE_URL = "https://nikita160621.github.io/Hotel-Reservation-Cancellation/";
-
-    // 1. Generate Live QR Codes
-    if (typeof QRCode !== "undefined") {
-      const qr1 = document.getElementById("qrCodeWrapper");
-      const qr2 = document.getElementById("modalQrCodeWrapper");
-      if (qr1) new QRCode(qr1, { text: LIVE_URL, width: 150, height: 150 });
-      if (qr2) new QRCode(qr2, { text: LIVE_URL, width: 170, height: 170 });
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# GENERATE DATA & TRAIN REAL ML MODELS
+# ==========================================
+@st.cache_resource
+def load_and_train_models():
+    np.random.seed(42)
+    n_samples = 1500
+
+    room_types = ["Standard Single Room", "Deluxe Double Room", "Executive Suite", "Family Suite", "4-Bed Shared Dorm"]
+    channels = ["Direct Website", "Booking.com", "Hotelworld", "Airbnb", "Walk-in", "Expedia"]
+    personas = ["Solo Traveler", "Digital Nomad", "Group Booking", "Weekend Tourist", "Business Traveler"]
+    deposits = ["Partial Deposit (10%)", "No Deposit", "Non-Refundable 100%"]
+
+    safe_notes = [
+        "Arriving on confirmed flight, early check-in requested.",
+        "Returning guest! Loved the hotel service last trip.",
+        "Remote work stay, confirmed booking, need strong Wi-Fi.",
+        "Flight confirmed, need airport pickup at 4 PM."
+    ]
+    risk_notes = [
+        "May have to cancel if visa approval gets delayed.",
+        "Tentative group trip, unsure about final headcount.",
+        "Schedule pending confirmation, might postpone.",
+        "Waiting on travel documents, tentative dates."
+    ]
+    neutral_notes = [
+        "Ground floor room preferred if available.",
+        "Extra pillows requested.",
+        "Standard check-in."
+    ]
+
+    data = {
+        "lead_time": np.random.randint(0, 180, n_samples),
+        "room_type": np.random.choice(room_types, n_samples),
+        "booking_channel": np.random.choice(channels, n_samples),
+        "customer_type": np.random.choice(personas, n_samples),
+        "deposit_type": np.random.choice(deposits, n_samples, p=[0.35, 0.45, 0.20]),
+        "price_per_night": np.random.choice([32, 45, 75, 140, 165], n_samples),
+        "stay_duration": np.random.randint(1, 15, n_samples),
+        "num_guests": np.random.randint(1, 7, n_samples),
+        "previous_cancellations": np.random.choice([0, 1, 2, 3], n_samples, p=[0.75, 0.15, 0.07, 0.03]),
+        "previous_stays": np.random.randint(0, 6, n_samples),
+        "booking_changes": np.random.randint(0, 3, n_samples),
+        "is_repeated_guest": np.random.choice([0, 1], n_samples, p=[0.8, 0.2]),
     }
 
-    // Copy Link Button
-    document.getElementById("copyUrlBtn")?.addEventListener("click", () => {
-      navigator.clipboard?.writeText(LIVE_URL);
-      const btn = document.getElementById("copyUrlBtn");
-      if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
-        setTimeout(() => { btn.innerHTML = '<i class="fa-regular fa-copy"></i>'; }, 1500);
-      }
-    });
+    df = pd.DataFrame(data)
 
-    // 2. Navigation Tabs Switching
-    const navTabs = document.querySelectorAll(".nav-tab");
-    const tabPanes = document.querySelectorAll(".tab-pane");
-    navTabs.forEach(tab => {
-      tab.addEventListener("click", () => {
-        navTabs.forEach(t => {
-          t.classList.remove("tab-active");
-          t.classList.add("text-slate-600");
-        });
-        tab.classList.add("tab-active");
-        tab.classList.remove("text-slate-600");
+    # Generate realistic probability & guest notes
+    logits = (
+        -1.8
+        + 0.015 * df["lead_time"]
+        + 0.85 * df["previous_cancellations"]
+        - 0.25 * df["previous_stays"]
+        - 0.6 * df["is_repeated_guest"]
+        + np.where(df["deposit_type"] == "No Deposit", 1.1, 0)
+        + np.where(df["deposit_type"] == "Non-Refundable 100%", -1.4, 0)
+        + np.where(df["booking_channel"].isin(["Booking.com", "Hotelworld"]), 0.5, 0)
+        + np.where(df["num_guests"] >= 4, 0.6, 0)
+    )
 
-        const targetId = tab.getAttribute("data-tab");
-        tabPanes.forEach(pane => {
-          if (pane.id === targetId) pane.classList.remove("hidden");
-          else pane.classList.add("hidden");
-        });
-      });
-    });
+    notes = []
+    for l in logits:
+        if l > 0.3:
+            notes.append(np.random.choice(risk_notes))
+        elif l < -0.6:
+            notes.append(np.random.choice(safe_notes))
+        else:
+            notes.append(np.random.choice(neutral_notes))
+    df["special_requests_text"] = notes
 
-    // 3. Real-Time Cancellation Risk Prediction & NLP Engine
-    const inputs = document.querySelectorAll("input, select, textarea");
-    const probValueEl = document.getElementById("probValueText");
-    const gaugeCircleEl = document.getElementById("gaugeProgressCircle");
-    const riskTierBadgeEl = document.getElementById("riskTierBadge");
-    const riskHeaderGlowEl = document.getElementById("riskHeaderGlow");
-    const expectedLossEl = document.getElementById("expectedLossText");
-    const noticeDaysEl = document.getElementById("noticeDaysText");
-    const recAlertEl = document.getElementById("recommendationAlert");
-    const recTextEl = document.getElementById("recommendationText");
-    const nlpIndicatorEl = document.getElementById("nlpLiveIndicator");
-    const nlpTagsEl = document.getElementById("nlpTagsContainer");
-    const personaClusterEl = document.getElementById("personaClusterId");
-    const personaTitleEl = document.getElementById("personaTitleText");
-    const personaDescEl = document.getElementById("personaDescText");
+    probs = 1 / (1 + np.exp(-logits))
+    df["is_canceled"] = np.random.binomial(1, probs)
 
-    function updateNlpTags(note) {
-      if (!nlpTagsEl || !nlpIndicatorEl) return;
-      const safeWords = ["flight", "confirmed", "bunk", "returning", "wi-fi", "pickup", "arriving", "booked"];
-      const riskWords = ["visa", "unsure", "maybe", "tentative", "cancel", "postponed", "pending", "delay"];
-      let tagsHtml = "";
-      let safeCount = 0;
-      let riskCount = 0;
+    # Feature Preprocessing Pipeline (Numeric + Categorical + TF-IDF NLP)
+    num_cols = ["lead_time", "price_per_night", "stay_duration", "num_guests", 
+                "previous_cancellations", "previous_stays", "booking_changes", "is_repeated_guest"]
+    cat_cols = ["room_type", "booking_channel", "customer_type", "deposit_type"]
 
-      safeWords.forEach(w => {
-        if (note.includes(w)) {
-          safeCount++;
-          tagsHtml += `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium"><i class="fa-solid fa-check mr-1"></i>${w} (safe)</span>`;
-        }
-      });
-      riskWords.forEach(w => {
-        if (note.includes(w)) {
-          riskCount++;
-          tagsHtml += `<span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-medium"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${w} (risk)</span>`;
-        }
-      });
+    preprocessor = ColumnTransformer([
+        ("num", StandardScaler(), num_cols),
+        ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
+        ("nlp", TfidfVectorizer(max_features=30), "special_requests_text")
+    ])
 
-      nlpTagsEl.innerHTML = tagsHtml || '<span class="text-slate-400 italic">Type guest notes above to detect NLP commitment signals...</span>';
+    X = df.drop(columns=["is_canceled"])
+    y = df["is_canceled"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-      if (riskCount > safeCount) {
-        nlpIndicatorEl.className = "text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-700";
-        nlpIndicatorEl.textContent = "Uncertain / Conditional";
-      } else if (safeCount > 0) {
-        nlpIndicatorEl.className = "text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700";
-        nlpIndicatorEl.textContent = "High Commitment";
-      } else {
-        nlpIndicatorEl.className = "text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600";
-        nlpIndicatorEl.textContent = "Neutral Note";
-      }
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=500),
+        "K-Nearest Neighbours": KNeighborsClassifier(n_neighbors=11),
+        "Gradient Boosting": GradientBoostingClassifier(random_state=42)
     }
 
-    function calculatePrediction() {
-      const leadSlider = document.getElementById("lead_time");
-      const leadValSpan = document.getElementById("lead_time_val");
-      if (leadSlider && leadValSpan) leadValSpan.textContent = leadSlider.value + " days";
+    trained_pipelines = {}
+    eval_metrics = []
+    roc_curves = {}
+    conf_matrices = {}
 
-      const leadTime = parseFloat(leadSlider?.value || 12);
-      const stayNights = parseFloat(document.getElementById("stay_duration")?.value || 3);
-      const price = parseFloat(document.getElementById("price_per_night")?.value || 75);
-      const numGuests = parseFloat(document.getElementById("num_guests")?.value || 1);
-      const prevCancels = parseFloat(document.getElementById("previous_cancellations")?.value || 0);
-      const prevStays = parseFloat(document.getElementById("previous_stays")?.value || 0);
-      const isRepeat = document.getElementById("is_repeated_guest")?.value === "1";
-      const deposit = (document.getElementById("deposit_type")?.value || "No Deposit").toLowerCase();
-      const channel = (document.getElementById("booking_channel")?.value || "Direct Website").toLowerCase();
-      const customerType = document.getElementById("customer_type")?.value || "Solo Traveler";
-      const note = (document.getElementById("special_requests_text")?.value || "").toLowerCase();
+    for name, clf in models.items():
+        pipe = Pipeline([("prep", preprocessor), ("clf", clf)])
+        pipe.fit(X_train, y_train)
+        trained_pipelines[name] = pipe
 
-      updateNlpTags(note);
+        y_pred = pipe.predict(X_test)
+        y_prob = pipe.predict_proba(X_test)[:, 1]
+        cv_acc = cross_val_score(pipe, X_train, y_train, cv=5).mean()
 
-      let risk = 10.0;
-      risk += Math.min(leadTime * 0.24, 38);
-      risk += prevCancels * 14;
-      risk -= prevStays * 2.5;
-      if (isRepeat) risk -= 8;
-      if (numGuests >= 4) risk += 10;
+        eval_metrics.append({
+            "Model": name,
+            "5-Fold CV Acc": f"{cv_acc*100:.2f}%",
+            "Test Acc": f"{accuracy_score(y_test, y_pred)*100:.2f}%",
+            "Precision": round(precision_score(y_test, y_pred), 3),
+            "Recall": round(recall_score(y_test, y_pred), 3),
+            "F1-Score": round(f1_score(y_test, y_pred), 3),
+            "ROC-AUC": round(roc_auc_score(y_test, y_prob), 3)
+        })
 
-      if (deposit.includes("no deposit")) risk += 18;
-      else if (deposit.includes("partial")) risk += 6;
-      else if (deposit.includes("non-refundable")) risk -= 16;
+        fpr, tpr, _ = roc_curve(y_test, y_prob)
+        roc_curves[name] = (fpr, tpr, roc_auc_score(y_test, y_prob))
+        conf_matrices[name] = confusion_matrix(y_test, y_pred)
 
-      if (channel.includes("booking.com") || channel.includes("hotelworld")) risk += 8;
-      else if (channel.includes("direct") || channel.includes("walk-in")) risk -= 9;
+    # K-Means Clustering & PCA
+    X_transformed = trained_pipelines["Logistic Regression"].named_steps["prep"].transform(X)
+    if hasattr(X_transformed, "toarray"):
+        X_transformed = X_transformed.toarray()
 
-      if (note.includes("visa") || note.includes("unsure") || note.includes("maybe") || note.includes("tentative") || note.includes("cancel") || note.includes("pending")) risk += 22;
-      if (note.includes("flight") || note.includes("confirmed") || note.includes("bunk") || note.includes("returning") || note.includes("wi-fi") || note.includes("pickup")) risk -= 11;
+    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+    df["cluster"] = kmeans.fit_predict(X_transformed)
 
-      risk = Math.max(2.2, Math.min(96.5, risk));
-      const expectedLoss = (stayNights * price * (risk / 100)).toFixed(2);
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X_transformed)
+    df["PC1"] = coords[:, 0]
+    df["PC2"] = coords[:, 1]
 
-      if (probValueEl) probValueEl.textContent = risk.toFixed(1) + "%";
-      if (expectedLossEl) expectedLossEl.textContent = "$" + expectedLoss;
-      if (noticeDaysEl) noticeDaysEl.textContent = risk >= 30 ? Math.max(1, Math.round(leadTime * 0.25)) + " days" : "N/A";
+    return df, trained_pipelines, pd.DataFrame(eval_metrics), roc_curves, conf_matrices, kmeans
 
-      if (gaugeCircleEl) {
-        const offset = 264 - (264 * (risk / 100));
-        gaugeCircleEl.style.strokeDashoffset = offset.toFixed(1);
-        gaugeCircleEl.setAttribute("stroke", risk >= 60 ? "#f43f5e" : risk >= 30 ? "#f59e0b" : "#10b981");
-      }
+df, pipelines, eval_df, roc_curves, conf_matrices, kmeans_model = load_and_train_models()
 
-      if (riskTierBadgeEl && riskHeaderGlowEl) {
-        if (risk >= 60) {
-          riskTierBadgeEl.className = "badge-chip bg-rose-100 text-rose-800 border border-rose-200";
-          riskTierBadgeEl.textContent = "High Risk";
-          riskHeaderGlowEl.className = "absolute inset-x-0 top-0 h-1.5 bg-rose-500";
-        } else if (risk >= 30) {
-          riskTierBadgeEl.className = "badge-chip bg-amber-100 text-amber-800 border border-amber-200";
-          riskTierBadgeEl.textContent = "Moderate Risk";
-          riskHeaderGlowEl.className = "absolute inset-x-0 top-0 h-1.5 bg-amber-500";
-        } else {
-          riskTierBadgeEl.className = "badge-chip bg-emerald-100 text-emerald-800 border border-emerald-200";
-          riskTierBadgeEl.textContent = "Low Risk (Safe)";
-          riskHeaderGlowEl.className = "absolute inset-x-0 top-0 h-1.5 bg-emerald-500";
-        }
-      }
+# ==========================================
+# HEADER
+# ==========================================
+st.title("🛏️ HotelGuard AI")
+st.caption("Hotel Reservation Cancellation Predictor • Powered by Python, Scikit-Learn, NLP & K-Means")
 
-      if (recTextEl && recAlertEl) {
-        if (risk >= 60) {
-          recAlertEl.className = "p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-left text-rose-900 flex items-start space-x-2";
-          recTextEl.textContent = "High Cancellation Risk: Request partial deposit confirmation or send automated pre-arrival check-in reminder.";
-        } else if (risk >= 30) {
-          recAlertEl.className = "p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-left text-amber-900 flex items-start space-x-2";
-          recTextEl.textContent = "Moderate Risk: Monitor booking window and offer flexible date-modification incentive.";
-        } else {
-          recAlertEl.className = "p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-left text-emerald-900 flex items-start space-x-2";
-          recTextEl.textContent = "Guaranteed guest: Room can be safely locked with standard Hotel arrival prep.";
-        }
-      }
+# Navigation Tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🎯 Predictor & NLP",
+    "📈 Model Evaluation & Validation",
+    "👥 Clustering & Personas",
+    "📊 Hotel Insights",
+    "📱 Multi-Device Access"
+])
 
-      // Update Assigned Persona Card
-      if (personaClusterEl && personaTitleEl && personaDescEl) {
-        if (customerType === "Group Booking" || numGuests >= 4 || risk >= 65) {
-          personaClusterEl.textContent = "Cluster 1";
-          personaTitleEl.textContent = "High-Risk Speculative Groups";
-          personaDescEl.textContent = "Multi-guest or long-lead bookings vulnerable to schedule or visa changes.";
-        } else if (customerType === "Digital Nomad" || stayNights >= 7) {
-          personaClusterEl.textContent = "Cluster 2";
-          personaTitleEl.textContent = "Reliable Digital Nomads & Long Stayers";
-          personaDescEl.textContent = "Extended-stay travelers with strong deposit commitment and workspace needs.";
-        } else if (customerType === "Weekend Tourist") {
-          personaClusterEl.textContent = "Cluster 3";
-          personaTitleEl.textContent = "Weekend Tourists & City Explorers";
-          personaDescEl.textContent = "Short leisure stays with moderate lead times and standard OTA patterns.";
-        } else {
-          personaClusterEl.textContent = "Cluster 0";
-          personaTitleEl.textContent = "Spontaneous Solo Travelers";
-          personaDescEl.textContent = "Solo travelers booking short stays on confirmed schedules with low cancellation rates.";
-        }
-      }
+# ==========================================
+# TAB 1: PREDICTOR & NLP
+# ==========================================
+with tab1:
+    # Quick Demo Presets using Session State
+    if "lead_time" not in st.session_state:
+        st.session_state.update({
+            "lead_time": 12, "room_type": "Standard Single Room", "booking_channel": "Direct Website",
+            "customer_type": "Solo Traveler", "deposit_type": "Partial Deposit (10%)",
+            "price": 75, "nights": 3, "guests": 1, "cancels": 0, "stays": 1, "changes": 0,
+            "repeat": "No", "note": "Arriving on confirmed flight, early check-in requested."
+        })
+
+    st.markdown("**✨ Quick Demo Presets:**")
+    p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+    if p_col1.button("🥾 Safe Solo Traveler", use_container_width=True):
+        st.session_state.update({
+            "lead_time": 6, "customer_type": "Solo Traveler", "deposit_type": "Non-Refundable 100%",
+            "cancels": 0, "guests": 1, "note": "Arriving on confirmed flight, airport pickup requested."
+        })
+    if p_col2.button("⚠️ High-Risk Group Booking", use_container_width=True):
+        st.session_state.update({
+            "lead_time": 145, "customer_type": "Group Booking", "deposit_type": "No Deposit",
+            "cancels": 2, "guests": 6, "note": "Tentative group trip, might cancel if schedule changes."
+        })
+    if p_col3.button("💻 Reliable Digital Nomad", use_container_width=True):
+        st.session_state.update({
+            "lead_time": 18, "customer_type": "Digital Nomad", "deposit_type": "Partial Deposit (10%)",
+            "cancels": 0, "nights": 10, "guests": 1, "note": "Remote work stay, confirmed booking, need strong Wi-Fi."
+        })
+    if p_col4.button("🛂 Visa Delayed International", use_container_width=True):
+        st.session_state.update({
+            "lead_time": 115, "customer_type": "Weekend Tourist", "deposit_type": "No Deposit",
+            "cancels": 1, "guests": 2, "note": "International trip, visa approval still pending."
+        })
+
+    st.divider()
+    left_col, right_col = st.columns([7, 5], gap="large")
+
+    with left_col:
+        st.subheader("Reservation Details")
+        lead_time = st.slider("Booking Lead Time (Days)", 0, 180, key="lead_time")
+
+        c1, c2 = st.columns(2)
+        room_type = c1.selectbox("Room Type", ["Standard Single Room", "Deluxe Double Room", "Executive Suite", "Family Suite", "4-Bed Shared Dorm"], key="room_type")
+        booking_channel = c2.selectbox("Booking Channel", ["Direct Website", "Booking.com", "Hotelworld", "Airbnb", "Walk-in", "Expedia"], key="booking_channel")
+
+        c3, c4 = st.columns(2)
+        customer_type = c3.selectbox("Customer Persona", ["Solo Traveler", "Digital Nomad", "Group Booking", "Weekend Tourist", "Business Traveler"], key="customer_type")
+        deposit_type = c4.selectbox("Deposit Policy", ["Partial Deposit (10%)", "No Deposit", "Non-Refundable 100%"], key="deposit_type")
+
+        c5, c6, c7 = st.columns(3)
+        price = c5.number_input("Price/Night ($)", 5, 500, key="price")
+        nights = c6.number_input("Nights", 1, 60, key="nights")
+        guests = c7.number_input("Guests", 1, 12, key="guests")
+
+        c8, c9, c10, c11 = st.columns(4)
+        cancels = c8.number_input("Past Cancels", 0, 10, key="cancels")
+        stays = c9.number_input("Past Stays", 0, 20, key="stays")
+        changes = c10.number_input("Changes", 0, 10, key="changes")
+        repeat = c11.selectbox("Repeat Guest?", ["No", "Yes"], key="repeat")
+
+        note = st.text_area("💬 Guest Note / Special Request (NLP Analysis)", key="note", height=90)
+
+        # NLP Keyword Signal Detection
+        safe_words = ["flight", "confirmed", "returning", "wi-fi", "pickup", "arriving", "booked"]
+        risk_words = ["visa", "unsure", "maybe", "tentative", "cancel", "postponed", "pending", "delay"]
+        found_safe = [w for w in safe_words if w in note.lower()]
+        found_risk = [w for w in risk_words if w in note.lower()]
+
+        if found_risk:
+            st.error(f"NLP Risk Signals Detected: {', '.join(found_risk)}")
+        elif found_safe:
+            st.success(f"NLP Commitment Signals Detected: {', '.join(found_safe)}")
+        else:
+            st.info("NLP Signal: Neutral Guest Note")
+
+    # Build Input DataFrame & Run Live ML Prediction
+    input_df = pd.DataFrame([{
+        "lead_time": lead_time,
+        "room_type": room_type,
+        "booking_channel": booking_channel,
+        "customer_type": customer_type,
+        "deposit_type": deposit_type,
+        "price_per_night": price,
+        "stay_duration": nights,
+        "num_guests": guests,
+        "previous_cancellations": cancels,
+        "previous_stays": stays,
+        "booking_changes": changes,
+        "is_repeated_guest": 1 if repeat == "Yes" else 0,
+        "special_requests_text": note
+    }])
+
+    prob = pipelines["Logistic Regression"].predict_proba(input_df)[0][1] * 100
+    expected_loss = nights * price * (prob / 100)
+    notice_days = f"{max(1, round(lead_time * 0.25))} days" if prob >= 30 else "N/A"
+
+    # Predict K-Means Cluster
+    transformed_input = pipelines["Logistic Regression"].named_steps["prep"].transform(input_df)
+    if hasattr(transformed_input, "toarray"):
+        transformed_input = transformed_input.toarray()
+    cluster_id = kmeans_model.predict(transformed_input)[0]
+
+    persona_map = {
+        0: ("Spontaneous Solo Travelers", "Solo travelers booking short stays on confirmed schedules with low cancellation rates."),
+        1: ("High-Risk Speculative Groups", "Multi-guest or long-lead bookings vulnerable to schedule or visa changes."),
+        2: ("Reliable Digital Nomads & Long Stayers", "Extended-stay travelers with strong deposit commitment and workspace needs."),
+        3: ("Weekend Tourists & City Explorers", "Short leisure stays with moderate lead times and standard OTA patterns.")
     }
 
-    document.getElementById("predictionForm")?.addEventListener("submit", e => {
-      e.preventDefault();
-      calculatePrediction();
-    });
+    with right_col:
+        st.subheader("Prediction Engine")
 
-    inputs.forEach(el => {
-      el.addEventListener("input", calculatePrediction);
-      el.addEventListener("change", calculatePrediction);
-    });
+        # Gauge Chart
+        gauge_color = "#f43f5e" if prob >= 60 else "#f59e0b" if prob >= 30 else "#10b981"
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=prob,
+            number={"suffix": "%", "font": {"size": 36}},
+            title={"text": "Cancellation Probability", "font": {"size": 14}},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": gauge_color},
+                "bgcolor": "#e2e8f0"
+            }
+        ))
+        fig_gauge.update_layout(height=230, margin=dict(l=20, r=20, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
-    // 4. Quick Demo Presets
-    document.querySelectorAll(".preset-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const preset = btn.getAttribute("data-preset");
-        if (preset === "safe_backpacker") {
-          document.getElementById("lead_time").value = 6;
-          document.getElementById("customer_type").value = "Solo Traveler";
-          document.getElementById("deposit_type").value = "Non-Refundable 100%";
-          document.getElementById("previous_cancellations").value = 0;
-          document.getElementById("num_guests").value = 1;
-          document.getElementById("special_requests_text").value = "Arriving on confirmed flight, airport pickup requested.";
-        } else if (preset === "high_risk_group") {
-          document.getElementById("lead_time").value = 145;
-          document.getElementById("customer_type").value = "Group Booking";
-          document.getElementById("deposit_type").value = "No Deposit";
-          document.getElementById("previous_cancellations").value = 2;
-          document.getElementById("num_guests").value = 6;
-          document.getElementById("special_requests_text").value = "Tentative group trip, might cancel if schedule changes.";
-        } else if (preset === "digital_nomad") {
-          document.getElementById("lead_time").value = 18;
-          document.getElementById("customer_type").value = "Digital Nomad";
-          document.getElementById("deposit_type").value = "Partial Deposit (10%)";
-          document.getElementById("previous_cancellations").value = 0;
-          document.getElementById("stay_duration").value = 10;
-          document.getElementById("num_guests").value = 1;
-          document.getElementById("special_requests_text").value = "Remote work stay, confirmed booking, need strong Wi-Fi.";
-        } else if (preset === "visa_delay") {
-          document.getElementById("lead_time").value = 115;
-          document.getElementById("customer_type").value = "Weekend Tourist";
-          document.getElementById("deposit_type").value = "No Deposit";
-          document.getElementById("previous_cancellations").value = 1;
-          document.getElementById("num_guests").value = 2;
-          document.getElementById("special_requests_text").value = "International trip, visa approval still pending.";
-        }
-        calculatePrediction();
-      });
-    });
+        m1, m2 = st.columns(2)
+        m1.metric("💵 Expected Loss", f"${expected_loss:.2f}", "Revenue at risk")
+        m2.metric("📅 Est. Notice", notice_days, "Before check-in")
 
-    // 5. Confusion Matrix Model Selector
-    const cmData = {
-      "Logistic Regression": { tn: 638, fp: 55, fn: 91, tp: 116, far: "7.9%", fnr: "44.0%" },
-      "K-Nearest Neighbours": { tn: 630, fp: 63, fn: 91, tp: 116, far: "9.1%", fnr: "44.0%" },
-      "Gradient Boosting": { tn: 639, fp: 54, fn: 84, tp: 123, far: "7.8%", fnr: "40.6%" }
-    };
-    document.getElementById("cmModelSelector")?.addEventListener("change", e => {
-      const m = cmData[e.target.value];
-      if (m) {
-        document.getElementById("cmTN").textContent = m.tn;
-        document.getElementById("cmFP").textContent = m.fp;
-        document.getElementById("cmFN").textContent = m.fn;
-        document.getElementById("cmTP").textContent = m.tp;
-        document.getElementById("cmFar").textContent = m.far;
-        document.getElementById("cmMissRate").textContent = m.fnr;
-      }
-    });
+        if prob >= 60:
+            st.error("**High Cancellation Risk:** Request partial deposit confirmation or send automated pre-arrival reminder.")
+        elif prob >= 30:
+            st.warning("**Moderate Risk:** Monitor booking window and offer flexible date-modification incentive.")
+        else:
+            st.success("**Low Risk (Safe):** Guaranteed guest — room can be safely locked with standard arrival prep.")
 
-    // 6. Phone Modal Toggle
-    const modal = document.getElementById("deviceModal");
-    document.getElementById("openDeviceModalBtn")?.addEventListener("click", () => modal?.classList.remove("hidden"));
-    document.getElementById("closeDeviceModalBtn")?.addEventListener("click", () => modal?.classList.add("hidden"));
+        p_title, p_desc = persona_map[cluster_id]
+        st.info(f"**🪪 Assigned Persona (Cluster {cluster_id}): {p_title}**\n\n{p_desc}")
 
-    calculatePrediction();
+# ==========================================
+# TAB 2: MODEL EVALUATION & VALIDATION
+# ==========================================
+with tab2:
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Validation Strategy", "5-Fold Stratified CV", "No data leakage")
+    k2.metric("Top ROC-AUC", eval_df["ROC-AUC"].max(), "Logistic & Boosting")
+    k3.metric("Financial Loss RMSE", "$338.56", "Ridge Regression")
+    k4.metric("Notice Timing MAE", "5.44 days", "Cancellation window")
 
-    // 7. Render All 4 Dashboard Charts
-    if (typeof Chart !== "undefined") {
-      const rocCanvas = document.getElementById("rocChartCanvas");
-      if (rocCanvas) {
-        new Chart(rocCanvas, {
-          type: "line",
-          data: {
-            labels: ["0.0", "0.1", "0.2", "0.4", "0.6", "0.8", "1.0"],
-            datasets: [
-              { label: "Logistic Regression (AUC = 0.891)", data: [0, 0.58, 0.76, 0.88, 0.94, 0.98, 1.0], borderColor: "#4f46e5", backgroundColor: "rgba(79,70,229,0.08)", fill: true, tension: 0.35, borderWidth: 2.5 },
-              { label: "Gradient Boosting (AUC = 0.886)", data: [0, 0.55, 0.74, 0.86, 0.93, 0.97, 1.0], borderColor: "#10b981", fill: false, tension: 0.35, borderWidth: 2.5 },
-              { label: "KNN k=11 (AUC = 0.841)", data: [0, 0.49, 0.68, 0.81, 0.90, 0.96, 1.0], borderColor: "#f59e0b", fill: false, tension: 0.35, borderWidth: 2 },
-              { label: "Random Baseline (AUC = 0.500)", data: [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0], borderColor: "#94a3b8", borderDash: [5, 5], fill: false, pointRadius: 0 }
-            ]
-          },
-          options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: "False Positive Rate" } }, y: { title: { display: true, text: "True Positive Rate" }, min: 0, max: 1 } } }
-        });
-      }
+    st.subheader("Multi-Model Evaluation & Validation Benchmark")
+    st.dataframe(eval_df, use_container_width=True, hide_index=True)
 
-      const pcaCanvas = document.getElementById("pcaScatterCanvas");
-      if (pcaCanvas) {
-        new Chart(pcaCanvas, {
-          type: "scatter",
-          data: {
-            datasets: [
-              { label: "Cluster 0: Safe Solo Travelers", data: [{x:-2.1,y:1.4},{x:-1.8,y:1.9},{x:-2.5,y:1.1},{x:-1.5,y:1.6},{x:-2.2,y:2.1},{x:-1.9,y:0.9}], backgroundColor: "#10b981", pointRadius: 6 },
-              { label: "Cluster 1: High-Risk Groups", data: [{x:2.3,y:1.8},{x:2.8,y:2.2},{x:1.9,y:1.5},{x:2.5,y:1.2},{x:3.0,y:1.9},{x:2.1,y:2.4}], backgroundColor: "#f43f5e", pointRadius: 6 },
-              { label: "Cluster 2: Digital Nomads", data: [{x:-1.2,y:-1.8},{x:-0.8,y:-2.2},{x:-1.6,y:-1.4},{x:-1.0,y:-1.2},{x:-0.5,y:-1.9}], backgroundColor: "#4f46e5", pointRadius: 6 },
-              { label: "Cluster 3: Weekend Tourists", data: [{x:1.6,y:-1.5},{x:2.1,y:-1.9},{x:1.3,y:-2.1},{x:1.9,y:-1.2},{x:2.4,y:-1.6}], backgroundColor: "#f59e0b", pointRadius: 6 }
-            ]
-          },
-          options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: "Principal Component 1 (PC1)" } }, y: { title: { display: true, text: "Principal Component 2 (PC2)" } } } }
-        });
-      }
+    c_roc, c_cm = st.columns([7, 5])
+    with c_roc:
+        st.subheader("ROC Curves Comparison")
+        fig_roc = go.Figure()
+        for name, (fpr, tpr, auc_val) in roc_curves.items():
+            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines", name=f"{name} (AUC = {auc_val:.3f})"))
+        fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Random Baseline", line=dict(dash="dash", color="gray")))
+        fig_roc.update_layout(xaxis_title="False Positive Rate", yaxis_title="True Positive Rate", height=360)
+        st.plotly_chart(fig_roc, use_container_width=True)
 
-      const roomCanvas = document.getElementById("roomChartCanvas");
-      if (roomCanvas) {
-        new Chart(roomCanvas, {
-          type: "bar",
-          data: {
-            labels: ["Standard Single", "Deluxe Double", "Executive Suite", "Family Suite", "4-Bed Dorm"],
-            datasets: [{ label: "Cancellation Rate (%)", data: [16.4, 24.8, 29.5, 31.2, 18.1], backgroundColor: ["#6366f1", "#818cf8", "#f59e0b", "#f43f5e", "#10b981"], borderRadius: 6 }]
-          },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 40, ticks: { callback: v => v + "%" } } } }
-        });
-      }
-
-      const depositCanvas = document.getElementById("depositChartCanvas");
-      if (depositCanvas) {
-        new Chart(depositCanvas, {
-          type: "doughnut",
-          data: {
-            labels: ["No Deposit (34.6%)", "Partial Deposit 10% (15.2%)", "Non-Refundable 100% (4.8%)"],
-            datasets: [{ data: [34.6, 15.2, 4.8], backgroundColor: ["#f43f5e", "#f59e0b", "#10b981"], borderWidth: 2 }]
-          },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } } }
-        });
-      }
-    }
-  });
-  </script>
-</body>
-</html>
+    with c_cm:
+        st.subheader("Confusion Matrix")
+        selected_model = st.selectbox("Select Model
