@@ -1,0 +1,30 @@
+Subject: Submission of Major Project – Hotel Reservation Cancellation Prediction using KNN – Nikita Pancheshwar
+
+Dear Sir/Madam,
+
+I hope you are doing well.
+
+I am Nikita Pancheshwar, a B.Tech (Artificial Intelligence and Machine Learning) student, and I have completed the "Machine Learning using Python" course at Naviotech Solution Pvt. Limited, Indore. As part of my internship, I am submitting my major project, "Hotel Reservation Cancellation Prediction Using KNN Classifier".
+
+Project summary:
+- Predicts whether a hotel booking will be cancelled using the k-Nearest Neighbors algorithm
+- Covers EDA, preprocessing, cross-validation, hyper-parameter tuning and evaluation (accuracy, precision, recall, F1, confusion matrix)
+- Final model accuracy: 81.6% (tuned KNN), compared with Logistic Regression (80.8%)
+
+GitHub repository: https://github.com/Nikita160621/Hotel-Reservation-Cancellation
+
+Attached:
+1. Project Report (PDF)
+2. Presentation (PPT)
+
+The repository contains the source code, notebook, README with run instructions, generated graphs and results.
+
+Kindly review my submission and let me know if any changes or additional documents are required.
+
+Thank you for your time and guidance.
+
+Yours sincerely,
+Nikita Pancheshwar
+B.Tech (AIML)
+Phone: [your number]
+Email: [your email]

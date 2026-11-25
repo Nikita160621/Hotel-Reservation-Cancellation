@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store
+# keep the dataset out of git if you prefer (it is ~3 MB, fine to commit too)
+# data/Hotel_Reservations.csv
+models/*.joblib
