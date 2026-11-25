@@ -64,8 +64,7 @@ Hotel-Reservation-Cancellation/
 ├── reports/
 │   ├── figures/           # generated graphs
 │   ├── results.txt        # generated metrics
-│   ├── PROJECT_REPORT.md
-│   └── SUBMISSION_EMAIL.txt
+│ 
 ├── Project PPT.pptx
 ├── models/                # saved model (generated, git-ignored)
 ├── main.py                # runs the full ML pipeline
